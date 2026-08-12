@@ -1,13 +1,14 @@
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db.models import User, ValidationRun, ValidationField, ValidationException, ValidationProject
 from auth import get_current_user
 from services import excel_service, s3_service, regex_generator
-from schemas import FieldRuleIn, RegexGenerateRequest, RegexGenerateResponse
+from schemas import CreateRunRequest, FieldRuleIn, RegexGenerateRequest, RegexGenerateResponse
 
 router = APIRouter(prefix="/api/runs", tags=["validation"])
 
@@ -23,15 +24,30 @@ def _get_owned_run(run_id: uuid.UUID, db: Session, current_user: User) -> Valida
 
 
 @router.post("/")
-def create_run(project_id: uuid.UUID, db: Session = Depends(get_db),
-               current_user: User = Depends(get_current_user)):
+def create_run(
+    project_id: uuid.UUID,
+    payload: CreateRunRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     project = db.get(ValidationProject, project_id)
     if not project or project.user_id != current_user.id:
         raise HTTPException(404, "Project not found")
 
-    run = ValidationRun(project_id=project_id, created_by=current_user.id)
+    run = ValidationRun(
+        project_id=project_id,
+        name=payload.name,
+        created_by=current_user.id,
+    )
     db.add(run)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="A validation run with this name already exists in this project",
+        )
     db.refresh(run)
     return {"run_id": str(run.id)}
 
@@ -176,7 +192,7 @@ def get_result(run_id: uuid.UUID, db: Session = Depends(get_db),
         "id": str(run.id),
         "projectLabel": project.name if project else "",
         "projectName": project.name if project else "",
-        "runName": run.run_name,
+        "runName": run.name,
         "healthScore": float(run.health_score),
         "processedRecords": run.total_records,
         "validRows": run.valid_rows,
