@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import (Column, String, Integer, Boolean, Text, ForeignKey,
-                         TIMESTAMP, Numeric)
+                         TIMESTAMP, Numeric, UniqueConstraint)
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -32,9 +32,12 @@ class ValidationProject(Base):
 
 class ValidationRun(Base):
     __tablename__ = "validation_runs"
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_validation_runs_project_name"),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id = Column(UUID(as_uuid=True), ForeignKey("validation_projects.id", ondelete="CASCADE"), nullable=False)
-    run_name = Column(String, default="New validation run")
+    name = Column(String(120), nullable=False)
     status = Column(String, default="draft")
 
     source_filename = Column(String)

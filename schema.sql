@@ -34,7 +34,7 @@ CREATE INDEX idx_projects_user_id ON validation_projects(user_id);
 CREATE TABLE validation_runs (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id          UUID NOT NULL REFERENCES validation_projects(id) ON DELETE CASCADE,
-    run_name            TEXT NOT NULL DEFAULT 'New validation run',
+    name                VARCHAR(120) NOT NULL,
     status              TEXT NOT NULL DEFAULT 'draft'
                          CHECK (status IN ('draft','rules_configured','running','completed','failed')),
 
@@ -55,7 +55,9 @@ CREATE TABLE validation_runs (
     created_by          UUID REFERENCES users(id),
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     ran_at              TIMESTAMPTZ,
-    completed_at        TIMESTAMPTZ
+    completed_at        TIMESTAMPTZ,
+
+    CONSTRAINT uq_validation_runs_project_name UNIQUE (project_id, name)
 );
 
 CREATE INDEX idx_runs_project_id ON validation_runs(project_id);

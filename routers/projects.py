@@ -53,7 +53,7 @@ def list_project_runs(project_id: uuid.UUID, db: Session = Depends(get_db),
     )
     return [{
         "id": str(r.id),
-        "name": r.run_name,
+        "name": r.name,
         "records": f"{r.total_records} records",
         "ranAt": r.ran_at.isoformat() if r.ran_at else None,
         "status": r.status if r.status in ("completed", "failed", "running") else "running",

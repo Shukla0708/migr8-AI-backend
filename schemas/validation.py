@@ -1,6 +1,20 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+class CreateRunRequest(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def trim_nonempty(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("must not be empty")
+        if len(cleaned) > 120:
+            raise ValueError("must be at most 120 characters")
+        return cleaned
 
 
 class FieldRuleIn(BaseModel):
