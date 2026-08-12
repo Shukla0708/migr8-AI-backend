@@ -47,3 +47,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return UserOut(id=str(current_user.id), fullName=current_user.full_name, email=current_user.email)
+
+
+@router.post("/logout")
+def logout(current_user: User = Depends(get_current_user)):
+    # Stateless JWT: client discards the token. Endpoint confirms the session was valid.
+    return {"message": "Logged out", "userId": str(current_user.id)}
+

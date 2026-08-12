@@ -124,6 +124,7 @@ Prefer applying `schema.sql` in pgAdmin/`psql`. On startup, `Base.metadata.creat
 | POST | `/register` | no | `fullName`, `email`, `password` | `{ token, user }` |
 | POST | `/login` | no | `email`, `password` | `{ token, user }` |
 | GET | `/me` | Bearer | — | `UserOut` |
+| POST | `/logout` | Bearer | Stateless JWT ack; client discards token | `{ message, userId }` |
 
 ### Projects — `/api/projects`
 
@@ -240,12 +241,21 @@ Smoke checks:
 - Password reset
 - Project switcher UI (backend already supports multiple projects)
 - Stricter alignment of auto-created tables with `schema.sql` CHECKs
-- Server-side auth (httpOnly cookie) so results can SSR
+- Server-side auth (httpOnly cookie) so results can SSR — frontend currently uses Bearer + readable cookie for middleware
 - Drop unused `passlib` from `requirements.txt` once confirmed unused
 
 ---
 
 ## Session Log
+
+### 2026-08-13 — Logout endpoint
+
+- Added `POST /api/auth/logout` (Bearer required). Confirms session; client clears JWT (stateless).
+
+### 2026-08-13 — Frontend consumes JWT (no API change)
+
+- Next.js frontend now stores login/register `token`, sends `Authorization: Bearer`, and guards routes with cookie + `GET /api/auth/me`.
+- Auth contract unchanged: `POST /api/auth/login|register` → `{ token, user }`, `GET /api/auth/me`.
 
 ### 2026-08-12 — Windows / Python 3.13 runtime fixes + ProjectOut UUID
 
