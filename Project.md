@@ -25,7 +25,7 @@
 | ORM | **SQLAlchemy** `2.0` | Declarative models in `db/models.py` |
 | DB | **PostgreSQL** | Via `psycopg2-binary`; URL from `.env` |
 | Auth | **JWT** (`python-jose`) + **bcrypt** (direct; not passlib) | Bearer token |
-| Files | **boto3** → S3 (or MinIO) | Source + result workbooks — real AWS keys required for upload |
+| Files | **boto3** → S3, or **local disk** | `STORAGE_BACKEND=auto|local|s3` |
 | Excel | **openpyxl** | Headers, red-fill failures, reason column |
 | AI rules | **Groq** `llama-3.3-70b-versatile` | Plain English → regex |
 | Config | **pydantic-settings** | Loads `.env` |
@@ -160,8 +160,10 @@ Per-cell checks driven by field config:
 - Max length, decimal precision
 - Case: uppercase / lowercase / camelCase
 - Email, mobile, date formats, special chars
-- Custom regex
+- Custom regex via **`re.fullmatch`** (entire cell must match)
 - Key uniqueness (in-run `seen_keys` set)
+
+**Dates (Excel-aware):** openpyxl returns real `datetime`/`date` objects for date cells (not `"21-05-2024"` text). Those objects are accepted as valid dates. String values still accept `%Y-%m-%d`, `%d-%m-%Y`, `%m/%d/%Y`, `%d/%m/%Y` (plus datetime string forms). Date separators (`-` / `/`) are not treated as disallowed special characters when the value is a valid date. For regex on date cells, common display forms (`YYYY-MM-DD`, `DD-MM-YYYY`, etc.) are tried so a DD-MM pattern can still pass an Excel date cell.
 
 ### `excel_service`
 
@@ -170,11 +172,13 @@ Per-cell checks driven by field config:
 
 ### `regex_generator`
 
-Groq chat completion → JSON `{"regex":"..."}`; pattern compiled before return.
+**Always LLM-driven (hackathon Rule 5):** Groq `llama-3.3-70b-versatile` turns plain English → JSON `{"regex":"..."}`. Pattern is compiled before return; stray `^`/`$` anchors are stripped because the engine uses `re.fullmatch`. System prompt includes few-shot examples (e.g. `"starts with H4"` → `H4.*`) so the model rejects values that break the rule.
+
+On **`PUT /{run_id}/rules`**, if `regex_prompt` is set, the backend calls Groq again and stores the resulting `regex` (so Rule 5 stays LLM-backed even if the UI Generate button was skipped). Falls back to any client-supplied `regex` if generation fails.
 
 ### `s3_service`
 
-`upload_bytes` / `download_bytes` / `presigned_url` against `S3_BUCKET`.
+`upload_bytes` / `download_bytes` / `presigned_url` — uses S3 when real AWS keys are set; otherwise **local disk** under `local_storage/` (`STORAGE_BACKEND=auto`).
 
 ---
 
@@ -224,7 +228,9 @@ Smoke checks:
 6. Keep routers thin; business logic in `services/`.
 7. **Hash passwords with `bcrypt` directly** — avoid passlib + bcrypt 5.x wrap-bug crash on Windows/Python 3.13.
 8. **Always `str(uuid)` in API response models** — FastAPI response validation rejects raw `UUID` when the schema field is `str` (see `ProjectOut` / projects router).
-9. **Valid AWS (or MinIO) credentials required** for upload/download; placeholder keys → `InvalidAccessKeyId` on `PutObject`.
+9. **Storage:** `STORAGE_BACKEND=auto` uses local disk when AWS keys are placeholders; set real keys + `s3` for cloud.
+10. **Rule 5 is LLM-only** — no deterministic regex shortcuts; Groq generates every custom pattern from plain English.
+11. **Date cells from Excel are typed values** — never rely on `str(datetime)` alone for format checks.
 
 ---
 
@@ -259,6 +265,13 @@ Smoke checks:
 
 - Documented stack, structure, env, data model, API map, services, run instructions.
 
+### 2026-08-13 — Date validation + LLM regex hardening
+
+- **Dates:** Excel `datetime`/`date` cells no longer fail as “Invalid date format” (was caused by `str(value)` → `"2024-05-21 00:00:00"`). Accept typed dates; keep string format list; skip special-char flag for valid date separators.
+- **Regex engine:** switched custom-rule matching from `re.match` → `re.fullmatch`; try multiple date string forms for regex on Excel date cells.
+- **Groq Rule 5:** stronger system prompt + few-shot examples; strip `^`/`$` from model output. On save rules, re-generate `regex` from `regex_prompt` via Groq when a prompt is present (LLM remains the only generator — no deterministic bypass).
+- **Repo:** backend published to https://github.com/Shukla0708/migr8-AI-backend
+
 ---
 
 ## Change Checklist
@@ -267,4 +280,4 @@ Smoke checks:
 - [ ] New route or response shape (also update `frontend-updates/Project.md` / frontend `Project.md`)
 - [ ] Model / `schema.sql` change
 - [ ] New env var / `.env.example`
-- [ ] Service behavior change (rules, Excel, S3, Groq)
+- [x] Service behavior change (rules, Excel, S3, Groq) — 2026-08-13 date + LLM regex
